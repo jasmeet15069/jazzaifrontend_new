@@ -22,3 +22,17 @@ Example:
 ```env
 NEXT_PUBLIC_JAZZ_API_BASE=https://imperceptibly-hymnlike-leesa.ngrok-free.dev
 ```
+
+## CI/CD
+
+GitHub Actions now runs on every push and pull request:
+
+- Installs dependencies with `npm ci`.
+- Builds the Next.js app with `npm run build`.
+
+Vercel deployment is optional. If this repo is connected to Vercel through the Vercel dashboard, pushes to `main` will already deploy automatically. The included deploy workflow stays disabled until these GitHub repository secrets are added:
+
+- `JAZZ_ENABLE_VERCEL_DEPLOY=true`
+- `VERCEL_TOKEN`
+- `VERCEL_ORG_ID`
+- `VERCEL_PROJECT_ID`

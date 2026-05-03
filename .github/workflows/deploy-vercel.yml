@@ -1,0 +1,46 @@
+name: Optional Vercel Deploy
+
+on:
+  workflow_run:
+    workflows: ["Jazz Next.js Frontend CI"]
+    branches: [main]
+    types: [completed]
+  workflow_dispatch:
+
+jobs:
+  deploy-vercel:
+    name: Deploy to Vercel
+    runs-on: ubuntu-latest
+    if: github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success'
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Deploy when secrets are configured
+        env:
+          ENABLE_DEPLOY: ${{ secrets.JAZZ_ENABLE_VERCEL_DEPLOY }}
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+          VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+          VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+        run: |
+          set -euo pipefail
+
+          if [ "${ENABLE_DEPLOY:-}" != "true" ]; then
+            echo "Vercel deploy skipped. Set JAZZ_ENABLE_VERCEL_DEPLOY=true to enable."
+            exit 0
+          fi
+
+          : "${VERCEL_TOKEN:?Missing VERCEL_TOKEN}"
+          : "${VERCEL_ORG_ID:?Missing VERCEL_ORG_ID}"
+          : "${VERCEL_PROJECT_ID:?Missing VERCEL_PROJECT_ID}"
+
+          npm ci
+          npx vercel pull --yes --environment=production --token="$VERCEL_TOKEN"
+          npx vercel build --prod --token="$VERCEL_TOKEN"
+          npx vercel deploy --prebuilt --prod --token="$VERCEL_TOKEN"
