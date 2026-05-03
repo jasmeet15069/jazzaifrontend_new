@@ -12,3 +12,13 @@ npm run dev
 ```
 
 Open `http://localhost:3000`.
+
+## Vercel Environment
+
+Set `NEXT_PUBLIC_JAZZ_API_BASE` to the public URL of the Jazz backend.
+
+Example:
+
+```env
+NEXT_PUBLIC_JAZZ_API_BASE=https://imperceptibly-hymnlike-leesa.ngrok-free.dev
+```
