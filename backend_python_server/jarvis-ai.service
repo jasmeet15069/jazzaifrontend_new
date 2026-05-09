@@ -1,0 +1,17 @@
+[Unit]
+Description=Jazz Jarvis isolated backend
+After=network.target
+
+[Service]
+Type=simple
+WorkingDirectory=/root/jazzai
+EnvironmentFile=-/root/jazzai/.env
+Environment=JARVIS_PORT=43432
+Environment=JARVIS_CORE_API=http://127.0.0.1:8000
+Environment=JARVIS_WORKSPACE=/root/jazzai/jarvis_workspace
+ExecStart=/root/jazzai/venv/bin/python /root/jazzai/jarvis_server.py
+Restart=always
+RestartSec=3
+
+[Install]
+WantedBy=multi-user.target

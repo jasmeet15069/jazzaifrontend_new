@@ -12,6 +12,8 @@ yarn-error.log*
 pnpm-debug.log*
 next-dev.out
 next-dev.err
+next-dev.log
+next-dev.err.log
 *.local
 Thumbs.db
 .DS_Store
