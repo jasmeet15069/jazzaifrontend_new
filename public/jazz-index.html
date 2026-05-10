@@ -2800,10 +2800,26 @@ function removePendingPaste(id) {
 function safePasteBody(text = '') {
   return String(text || '').replace(/<\/JAZZ_PASTED_CONTENT>/gi, '<\\/JAZZ_PASTED_CONTENT>');
 }
+function pasteLooksLikeCode(text = '') {
+  const raw = String(text || '');
+  if (!raw.trim()) return false;
+  if (/```|Traceback|SyntaxError|TypeError|ReferenceError|SFTTrainer|AutoTokenizer|BitsAndBytesConfig|torch|transformers|Dataset|notebook|ipynb/i.test(raw)) return true;
+  if (/\b(def|class|import|from|const|let|var|function|export|return|async|await|try|except|finally|subprocess|Path)\b/.test(raw)) return true;
+  const lines = raw.split(/\r?\n/).slice(0, 400);
+  const codeish = lines.filter(line => /[{};]|^\s*(def|class|import|from|const|let|var|function|return|if|for|while|try|except)\b/.test(line)).length;
+  return codeish >= 5;
+}
+function defaultPromptForPastes(pastes = []) {
+  const combined = (pastes || []).map(p => p?.text || '').join('\n').slice(0, 30000);
+  if (pasteLooksLikeCode(combined)) {
+    return 'Review and fix the pasted code/notebook. Identify the exact problem, explain why it fails, and provide corrected code or a precise patch.';
+  }
+  return 'Please analyze the pasted content.';
+}
 function buildMessageWithPastes(baseMessage = '', pastes = []) {
   const prompt = String(baseMessage || '').trim();
   if (!pastes.length) return prompt;
-  const head = prompt || 'Please analyze the pasted content.';
+  const head = prompt || defaultPromptForPastes(pastes);
   const sections = pastes.map((p, i) => {
     const stats = p.stats || pasteStats(p.text);
     const title = p.title || `Pasted content ${i + 1}`;
