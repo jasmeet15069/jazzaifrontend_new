@@ -949,7 +949,8 @@ let WS_URL = API.replace('https://', 'wss://').replace('http://', 'ws://');
 let _apiResolved = false;
 
 function isBlockedApiBase(base) {
-  return /imperceptibly-hymnlike-leesa\.ngrok-free\.dev/i.test(String(base || ''));
+  const raw = String(base || '').trim();
+  return !raw || /\$\{|[{}]/.test(raw) || /^(undefined|null)$/i.test(raw) || /imperceptibly-hymnlike-leesa\.ngrok-free\.dev/i.test(raw);
 }
 
 function apiFetch(url, opts = {}) {

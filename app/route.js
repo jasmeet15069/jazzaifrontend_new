@@ -4,7 +4,7 @@ import path from 'node:path';
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
-const FALLBACK_API_BASE = 'https://imperceptibly-hymnlike-leesa.ngrok-free.dev';
+const FALLBACK_API_BASE = 'http://45.79.124.28:8000';
 
 function jsString(value) {
   return String(value).replace(/\\/g, '\\\\').replace(/'/g, "\\'");
