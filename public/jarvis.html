@@ -40,7 +40,18 @@
     .composer{position:relative;z-index:3;min-height:0;border-top:1px solid var(--line);padding:14px 20px calc(16px + env(safe-area-inset-bottom));background:rgba(3,6,11,.88);display:grid;gap:10px;box-shadow:0 -18px 42px rgba(3,6,11,.68)}
     .inputrow{display:grid;grid-template-columns:44px minmax(0,1fr) 112px;gap:10px;align-items:end;min-width:0}
     .voice,.send,.filebtn,.danger,.ghost{border:1px solid var(--line);background:#07111d;color:var(--text);border-radius:12px;height:44px}
-    .voice{display:grid;place-items:center}.voice.active{border-color:var(--green);box-shadow:0 0 22px rgba(52,211,153,.28)}
+    .voice{position:relative;display:grid;place-items:center;overflow:hidden;background:radial-gradient(circle at 50% 50%,rgba(103,232,249,.16),rgba(7,17,29,.96) 58%);transition:border-color .18s ease,box-shadow .18s ease,transform .18s ease}
+    .voice:before{content:"";position:absolute;inset:8px;border-radius:999px;border:1px solid rgba(103,232,249,.22);opacity:.72}
+    .voice:hover{transform:translateY(-1px);border-color:rgba(103,232,249,.58);box-shadow:0 0 24px rgba(103,232,249,.18)}
+    .voice-bars{position:relative;z-index:1;display:flex;align-items:center;gap:3px;height:22px}
+    .voice-bars span{display:block;width:3px;height:10px;border-radius:999px;background:linear-gradient(180deg,#eaf7ff,var(--cyan));box-shadow:0 0 12px rgba(103,232,249,.72);transform-origin:center}
+    .voice-bars span:nth-child(1),.voice-bars span:nth-child(5){height:12px;opacity:.75}
+    .voice-bars span:nth-child(2),.voice-bars span:nth-child(4){height:18px}
+    .voice-bars span:nth-child(3){height:22px}
+    .voice.active,.voice.live{border-color:var(--green);box-shadow:0 0 22px rgba(52,211,153,.3),inset 0 0 20px rgba(52,211,153,.12)}
+    .voice.active .voice-bars span,.voice.live .voice-bars span{background:linear-gradient(180deg,#f8fffe,var(--green));animation:voicePulse .72s ease-in-out infinite alternate}
+    .voice.active .voice-bars span:nth-child(2),.voice.live .voice-bars span:nth-child(2){animation-delay:.1s}.voice.active .voice-bars span:nth-child(3),.voice.live .voice-bars span:nth-child(3){animation-delay:.2s}.voice.active .voice-bars span:nth-child(4),.voice.live .voice-bars span:nth-child(4){animation-delay:.3s}.voice.active .voice-bars span:nth-child(5),.voice.live .voice-bars span:nth-child(5){animation-delay:.4s}
+    @keyframes voicePulse{from{transform:scaleY(.58);opacity:.72}to{transform:scaleY(1.12);opacity:1}}
     textarea{width:100%;resize:none;min-height:44px;max-height:140px;border:1px solid var(--line);border-radius:12px;background:#07111d;color:var(--text);padding:12px 13px;outline:none}
     .send{background:linear-gradient(135deg,var(--cyan2),var(--violet));font-weight:800;border:0;color:#fff}.send:disabled{opacity:.55}
     .hint{font-size:11px;color:var(--muted);font-family:DM Mono,monospace}
@@ -73,9 +84,9 @@
         <div class="msg ai">Systems online. I can talk, use your selected Jazz model, and manage files inside the Jarvis workspace.</div>
       </section>
       <footer class="composer">
-        <div class="hint" id="hint">Voice uses your browser microphone. File actions are restricted to the Jarvis workspace.</div>
+        <div class="hint" id="hint">LiveKit voice link is on standby. File actions are restricted to the Jarvis workspace.</div>
         <div class="inputrow">
-          <button class="voice" id="voice" title="Talk to Jarvis" onclick="toggleVoice()">|||</button>
+          <button class="voice" id="voice" title="Use LiveKit voice mode" onclick="toggleVoice()"><span class="voice-bars" aria-hidden="true"><span></span><span></span><span></span><span></span><span></span></span></button>
           <textarea id="prompt" placeholder="Speak or type a command..."></textarea>
           <button class="send" id="send" onclick="sendPrompt()">Transmit</button>
         </div>
@@ -100,11 +111,28 @@
   </div>
   <script>
     const JARVIS_API = (window.JARVIS_API_BASE || '__JARVIS_API_BASE__' || '/api/jarvis').replace(/\/+$/,'');
-    const S = { token: localStorage.getItem('jazz_token') || '', cwd:'', selected:null, selectedEntry:null, speaking:false, recognition:null, models:[] };
+    const JAZZ_API = (window.JAZZ_API_BASE || '/api').replace(/\/+$/,'');
+    const S = {
+      token: localStorage.getItem('jazz_token') || '',
+      cwd:'',
+      selected:null,
+      selectedEntry:null,
+      speaking:false,
+      recognition:null,
+      models:[],
+      livekitRoom:null,
+      livekitTrack:null,
+      livekitSession:null,
+      livekitConnected:false,
+      livekitConnecting:false,
+      livekitAudioEls:[],
+      livekitClientPromise:null
+    };
     const el = id => document.getElementById(id);
     const esc = s => String(s||'').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
     function headers(json=true){ const h={}; if(json) h['Content-Type']='application/json'; if(S.token) h.Authorization='Bearer '+S.token; return h; }
     async function api(path, opts={}){ const r=await fetch(JARVIS_API+path,{...opts,headers:{...headers(!(opts.body instanceof FormData)),...(opts.headers||{})}}); if(!r.ok){ let t=await r.text(); throw new Error(t||r.statusText); } return r; }
+    async function jazzApi(path, opts={}){ const r=await fetch(JAZZ_API+path,{...opts,headers:{...headers(!(opts.body instanceof FormData)),...(opts.headers||{})}}); if(!r.ok){ let t=await r.text(); throw new Error(t||r.statusText); } return r; }
     function addMsg(text, who='ai'){ const d=document.createElement('div'); d.className='msg '+(who==='user'?'user':'ai'); d.innerHTML=esc(text); el('messages').appendChild(d); el('messages').scrollTop=el('messages').scrollHeight; return d; }
     function setLine(t){ el('sys-line').textContent=t; }
     function cleanJarvisAnswer(raw){
@@ -118,12 +146,140 @@
       const cleaned=cleanJarvisAnswer(raw);
       return cleaned ? esc(cleaned) : '<span class="mini">Thinking...</span>';
     }
-    function speak(text){ const spoken=cleanJarvisAnswer(text); if(!('speechSynthesis' in window) || !spoken.trim()) return; speechSynthesis.cancel(); const u=new SpeechSynthesisUtterance(spoken.slice(0,1200)); u.rate=1.04; u.pitch=.82; u.volume=1; window.speechSynthesis.speak(u); }
+    function speak(text){
+      // LiveKit owns Jarvis voice now. Keep typed chat text-only so browser TTS never leaks in.
+      return cleanJarvisAnswer(text);
+    }
+    function setVoiceState(state, detail){
+      const btn=el('voice');
+      const hint=el('hint');
+      btn.classList.toggle('active', state==='connecting' || state==='listening');
+      btn.classList.toggle('live', state==='live');
+      btn.title = state==='live' ? 'Stop LiveKit voice mode' : 'Use LiveKit voice mode';
+      if(state==='live') {
+        setLine('LiveKit voice online');
+        hint.textContent = detail || 'LiveKit voice is online. Speak naturally.';
+        el('hud').classList.add('speaking');
+      } else if(state==='connecting') {
+        setLine('opening LiveKit voice room');
+        hint.textContent = detail || 'Opening LiveKit voice room...';
+      } else if(state==='error') {
+        setLine('voice link fault');
+        hint.textContent = detail || 'LiveKit voice could not start.';
+        el('hud').classList.remove('speaking');
+      } else {
+        setLine(detail || 'online');
+        hint.textContent = 'LiveKit voice link is on standby. File actions are restricted to the Jarvis workspace.';
+        el('hud').classList.remove('speaking');
+      }
+    }
+    function loadLiveKitClient(){
+      const existing=window.LivekitClient || window.LiveKitClient || window.livekitClient;
+      if(existing) return Promise.resolve(existing);
+      if(S.livekitClientPromise) return S.livekitClientPromise;
+      S.livekitClientPromise=new Promise((resolve,reject)=>{
+        const s=document.createElement('script');
+        s.src='https://cdn.jsdelivr.net/npm/livekit-client/dist/livekit-client.umd.min.js';
+        s.async=true;
+        s.onload=()=>{
+          const LK=window.LivekitClient || window.LiveKitClient || window.livekitClient;
+          LK ? resolve(LK) : reject(new Error('LiveKit client did not load'));
+        };
+        s.onerror=()=>reject(new Error('LiveKit client failed to load'));
+        document.head.appendChild(s);
+      });
+      return S.livekitClientPromise;
+    }
+    function clearLiveKitAudio(){
+      for(const audio of S.livekitAudioEls){
+        try{ audio.pause(); audio.remove(); }catch(e){}
+      }
+      S.livekitAudioEls=[];
+    }
+    function attachLiveKitTrack(track, participant){
+      const isAudio = track && (track.kind === 'audio' || track.kind === 'kind-audio');
+      if(!isAudio || typeof track.attach !== 'function') return;
+      const audio=track.attach();
+      audio.autoplay=true;
+      audio.controls=false;
+      audio.playsInline=true;
+      audio.className='hidden';
+      audio.setAttribute('aria-hidden','true');
+      document.body.appendChild(audio);
+      S.livekitAudioEls.push(audio);
+      setVoiceState('live', (participant?.identity || participant?.name || 'Jarvis agent') + ' audio online.');
+    }
+    async function startLiveKitVoice(){
+      if(S.livekitConnected || S.livekitConnecting) return;
+      if(!S.token){ addMsg('Sign in to Jazz first, then start LiveKit voice.'); setVoiceState('error','Jazz login is required for LiveKit voice.'); return; }
+      S.livekitConnecting=true;
+      setVoiceState('connecting');
+      try{
+        const status=await jazzApi('/voice/livekit/status').then(r=>r.json());
+        if(!status.available) throw new Error('LiveKit is not configured on the server.');
+        const roomSeed='jarvis-'+Date.now().toString(36);
+        const session=await jazzApi('/voice/livekit/session',{method:'POST',body:JSON.stringify({language:'auto',room_name:roomSeed})}).then(r=>r.json());
+        const LK=await loadLiveKitClient();
+        const room=new LK.Room({adaptiveStream:true,dynacast:true});
+        room.on(LK.RoomEvent.TrackSubscribed,(track,publication,participant)=>attachLiveKitTrack(track,participant));
+        room.on(LK.RoomEvent.TrackUnsubscribed,(track)=>{
+          try{ track.detach().forEach(el=>el.remove()); }catch(e){}
+        });
+        room.on(LK.RoomEvent.Disconnected,()=>{
+          S.livekitConnected=false;
+          S.livekitRoom=null;
+          S.livekitTrack=null;
+          S.livekitSession=null;
+          clearLiveKitAudio();
+          setVoiceState('idle','online');
+        });
+        await room.connect(session.url, session.token);
+        const localTrack=await LK.createLocalAudioTrack({echoCancellation:true,noiseSuppression:true,autoGainControl:true});
+        await room.localParticipant.publishTrack(localTrack);
+        S.livekitRoom=room;
+        S.livekitTrack=localTrack;
+        S.livekitSession=session.session_id;
+        S.livekitConnected=true;
+        addMsg('LiveKit voice mode connected. Speak naturally; Jarvis will answer through the voice room.');
+        setVoiceState('live','LiveKit voice is online. Speak naturally.');
+      }catch(e){
+        await stopLiveKitVoice(false);
+        addMsg('LiveKit voice failed: '+e.message);
+        setVoiceState('error',e.message || 'LiveKit voice could not start.');
+      }finally{
+        S.livekitConnecting=false;
+      }
+    }
+    async function stopLiveKitVoice(showMessage=true){
+      const sid=S.livekitSession;
+      try{
+        if(S.livekitTrack){ try{ S.livekitTrack.stop(); }catch(e){} S.livekitTrack=null; }
+        if(S.livekitRoom){ try{ await S.livekitRoom.disconnect(); }catch(e){} S.livekitRoom=null; }
+        if(sid){ jazzApi('/voice/livekit/session/'+encodeURIComponent(sid)+'/end',{method:'POST',body:JSON.stringify({})}).catch(()=>{}); }
+      }finally{
+        S.livekitSession=null;
+        S.livekitConnected=false;
+        clearLiveKitAudio();
+        setVoiceState('idle','online');
+        if(showMessage) addMsg('LiveKit voice mode stopped.');
+      }
+    }
+    async function checkLiveKitVoice(){
+      if(!S.token) return;
+      try{
+        const d=await jazzApi('/voice/livekit/status').then(r=>r.json());
+        setVoiceState('idle', d.available ? 'LiveKit voice ready' : 'online');
+        if(!d.available) el('hint').textContent='LiveKit credentials are missing on the server.';
+      }catch(e){
+        el('hint').textContent='LiveKit voice check failed. Text Jarvis still works.';
+      }
+    }
     async function init(){
       if(!S.token){ el('auth-state').textContent='Sign in to Jazz first, then reopen Jarvis.'; setLine('waiting for Jazz session'); }
       try{ await api('/health',{headers:{}}); }catch(e){}
       await loadModels().catch(e=>setLine('model link pending'));
       await refreshFiles().catch(e=>addMsg('File link needs a valid Jazz login: '+e.message,'ai'));
+      await checkLiveKitVoice();
       el('prompt').addEventListener('keydown', e=>{ if(e.key==='Enter'&&!e.shiftKey){ e.preventDefault(); sendPrompt(); }});
     }
     async function loadModels(){
@@ -163,13 +319,8 @@
       finally{ el('send').disabled=false; el('hud').classList.remove('speaking'); }
     }
     function toggleVoice(){
-      const SR=window.SpeechRecognition||window.webkitSpeechRecognition; if(!SR){ addMsg('Speech recognition is not available in this browser.'); return; }
-      if(S.recognition){ S.recognition.stop(); S.recognition=null; el('voice').classList.remove('active'); return; }
-      const rec=new SR(); rec.lang='en-IN'; rec.interimResults=false; rec.continuous=false; S.recognition=rec; el('voice').classList.add('active'); setLine('listening');
-      rec.onresult=e=>{ el('prompt').value=e.results[0][0].transcript; sendPrompt(); };
-      rec.onend=()=>{ S.recognition=null; el('voice').classList.remove('active'); setLine('online'); };
-      rec.onerror=e=>{ addMsg('Voice input error: '+e.error); };
-      rec.start();
+      if(S.livekitConnected || S.livekitConnecting) stopLiveKitVoice();
+      else startLiveKitVoice();
     }
     async function refreshFiles(path=S.cwd){
       const r=await api('/files?path='+encodeURIComponent(path)); const d=await r.json(); S.cwd=d.path||''; el('cwd').textContent='/'+S.cwd;
