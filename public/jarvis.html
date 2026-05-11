@@ -107,7 +107,18 @@
     async function api(path, opts={}){ const r=await fetch(JARVIS_API+path,{...opts,headers:{...headers(!(opts.body instanceof FormData)),...(opts.headers||{})}}); if(!r.ok){ let t=await r.text(); throw new Error(t||r.statusText); } return r; }
     function addMsg(text, who='ai'){ const d=document.createElement('div'); d.className='msg '+(who==='user'?'user':'ai'); d.innerHTML=esc(text); el('messages').appendChild(d); el('messages').scrollTop=el('messages').scrollHeight; return d; }
     function setLine(t){ el('sys-line').textContent=t; }
-    function speak(text){ if(!('speechSynthesis' in window) || !text.trim()) return; speechSynthesis.cancel(); const u=new SpeechSynthesisUtterance(text.slice(0,1200)); u.rate=1.04; u.pitch=.82; u.volume=1; window.speechSynthesis.speak(u); }
+    function cleanJarvisAnswer(raw){
+      let text=String(raw||'').replace(/\r\n/g,'\n');
+      const answer=text.match(/<answer[^>]*>([\s\S]*?)(?:<\/answer>|$)/i);
+      if(answer) text=answer[1];
+      else text=text.replace(/<thinking[^>]*>[\s\S]*?<\/thinking>/gi,'').replace(/<thinking[^>]*>[\s\S]*$/i,'');
+      return text.replace(/<\/?(?:thinking|answer)[^>]*>/gi,'').trim();
+    }
+    function renderJarvisAnswer(raw){
+      const cleaned=cleanJarvisAnswer(raw);
+      return cleaned ? esc(cleaned) : '<span class="mini">Thinking...</span>';
+    }
+    function speak(text){ const spoken=cleanJarvisAnswer(text); if(!('speechSynthesis' in window) || !spoken.trim()) return; speechSynthesis.cancel(); const u=new SpeechSynthesisUtterance(spoken.slice(0,1200)); u.rate=1.04; u.pitch=.82; u.volume=1; window.speechSynthesis.speak(u); }
     async function init(){
       if(!S.token){ el('auth-state').textContent='Sign in to Jazz first, then reopen Jarvis.'; setLine('waiting for Jazz session'); }
       try{ await api('/health',{headers:{}}); }catch(e){}
@@ -142,10 +153,11 @@
         const reader=r.body.getReader(), dec=new TextDecoder(); let buf='';
         while(true){ const {value,done}=await reader.read(); if(done) break; buf+=dec.decode(value,{stream:true}); const lines=buf.split('\n'); buf=lines.pop();
           for(const line of lines){ if(!line.startsWith('data: ')) continue; let d; try{d=JSON.parse(line.slice(6));}catch{continue}
-            if(d.type==='delta'){ full+=d.content; bubble.innerHTML=esc(full); el('messages').scrollTop=el('messages').scrollHeight; }
+            if(d.type==='delta'){ full+=d.content; bubble.innerHTML=renderJarvisAnswer(full); el('messages').scrollTop=el('messages').scrollHeight; }
             if(d.type==='error'){ throw new Error(d.message||'Jarvis stream failed'); }
-            if(d.type==='done' && !full && d.content){ full=d.content; bubble.innerHTML=esc(full); }
+            if(d.type==='done' && !full && d.content){ full=d.content; bubble.innerHTML=renderJarvisAnswer(full); }
           }}
+        bubble.innerHTML=renderJarvisAnswer(full);
         setLine('online'); speak(full);
       }catch(e){ bubble.innerHTML='<span style="color:#fb7185">Jarvis link error: '+esc(e.message)+'</span>'; setLine('link degraded'); }
       finally{ el('send').disabled=false; el('hud').classList.remove('speaking'); }
